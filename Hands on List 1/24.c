@@ -1,6 +1,6 @@
 /*
 ============================================================================
-Name : 23.c
+Name : 24.c
 Author : Aman Verma
 Description :  Write a program to create an orphan process. 
 Date: 30th Aug, 2024.
