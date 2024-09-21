@@ -9,59 +9,33 @@ Date: 19th Sept, 2024.
 
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/wait.h>
-#include <sys/types.h> 
 
 int main() 
 {
-    int pipefd[2]; 
-    pid_t pid;
-    const char *message = "Hello from the pipe!";
-    char buffer[100];
+    int pipefds[2];
+    char write_msg[] = "Hello from the pipe!";
+    char read_msg[100];
 
-    if (pipe(pipefd) == -1) 
+    if (pipe(pipefds) == -1) 
     {
         perror("pipe");
-        exit(EXIT_FAILURE);
+        return 1;
     }
 
-    pid = fork();
-    if (pid == -1) 
-    {
-        perror("fork");
-        exit(EXIT_FAILURE);
-    }
+    write(pipefds[1], write_msg, strlen(write_msg) + 1);
 
-    if (pid == 0) 
-    {
-        close(pipefd[0]);  
+    read(pipefds[0], read_msg, sizeof(read_msg));
 
-        write(pipefd[1], message, strlen(message) + 1);
-        
-        close(pipefd[1]); 
-        exit(EXIT_SUCCESS);
-    } 
-    else 
-    {
-        close(pipefd[1]); 
+    printf("Read from pipe: %s\n", read_msg);
 
-        ssize_t bytesRead = read(pipefd[0], buffer, sizeof(buffer));
-        if (bytesRead == -1) {
-            perror("read");
-            exit(EXIT_FAILURE);
-        }
-
-        printf("Read from pipe: %s\n", buffer);
-        
-        close(pipefd[0]);  
-        wait(NULL);
-    }
+    close(pipefds[0]);
+    close(pipefds[1]);
 
     return 0;
 }
+
 
 
 /*
