@@ -7,8 +7,6 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <sys/file.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include "./struct/customer.h"
 #include "./struct/loan.h"
 #include "./struct/transaction.h"
@@ -16,7 +14,6 @@
 #include "./struct/employee.h"
 #include "./struct/manager.h"
 #include "./struct/admin.h"
-#include <asm-generic/socket.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
@@ -24,41 +21,38 @@
 /////////////////////////Transaction////////////////////////
 
 
-void log_transaction(int customerID, const char *type, float amount) {
+void log_transaction(int customerID, const char *type, float amount) 
+{
     struct transaction txn;
     static int transaction_counter = 0;
 
-    // Increment transaction ID (could also be loaded from the log file for persistence)
     txn.transactionID = ++transaction_counter;
     txn.customerID = customerID;
     strncpy(txn.type, type, sizeof(txn.type) - 1);
-    txn.type[sizeof(txn.type) - 1] = '\0';  // Ensure null termination
+    txn.type[sizeof(txn.type) - 1] = '\0'; 
     txn.amount = amount;
 
-    // Get the current timestamp
     time_t now = time(NULL);
     strftime(txn.timestamp, sizeof(txn.timestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
 
-    // Open the transaction log in append mode
-    int fd = open("./data/transaction.log", O_WRONLY | O_APPEND | O_CREAT, 0644);
-    if (fd < 0) {
+    int fd = open("./data/transaction.data", O_WRONLY | O_APPEND | O_CREAT, 0644);
+    if (fd < 0) 
+    {
         perror("Failed to open transaction log");
         return;
     }
 
-    // Apply an exclusive lock to avoid race conditions
     if (flock(fd, LOCK_EX) < 0) {
         perror("Failed to lock the transaction log");
         close(fd);
         return;
     }
 
-    // Write the transaction to the log
-    if (write(fd, &txn, sizeof(struct transaction)) != sizeof(struct transaction)) {
+    if (write(fd, &txn, sizeof(struct transaction)) != sizeof(struct transaction)) 
+    {
         perror("Failed to write transaction to log");
     }
 
-    // Unlock and close the file
     flock(fd, LOCK_UN);
     close(fd);
 }
@@ -69,7 +63,6 @@ void log_transaction(int customerID, const char *type, float amount) {
 
 float get_balance(int uid)
 {
-    // Open the file in read-only mode
     int fd = open("./data/customer.data", O_RDONLY);
     if (fd < 0)
     {
@@ -77,37 +70,36 @@ float get_balance(int uid)
         return -1;
     }
 
-    struct customer c;  // Struct to hold customer data
-    int found = 0;      // Flag to track if userID is found
-    float balance = -1; // Default value if userID is not found
+    struct customer c;  
+    int found = 0;      
+    float balance = -1; 
 
-    // Read the file record by record
     while (read(fd, &c, sizeof(struct customer)) == sizeof(struct customer))
     {
         printf("UserID : %d, Name: %s %s, Password: %s, Balance: %.2f, Loan: %.2f, Status: %s\n", c.userID, c.firstName, c.lastName, c.password, c.balance, c.loan, c.status);
         if (c.userID == uid)
-        { // Match userID
+        {
             printf("User ID %d found. Current balance: %.2f\n", c.userID, c.balance);
-            balance = c.balance; // Store the balance
+            balance = c.balance;
             found = 1;
-            break; // Exit the loop since user is found
+            break; 
         }
     }
 
-    close(fd); // Close the file
+    close(fd); 
 
     if (!found)
     {
         printf("User ID %d not found.\n", uid);
-        return -1; // Return -1 if userID is not found
+        return -1; 
     }
 
-    return balance; // Return the balance
+    return balance;
 }
 
 int deposit(int uid, float amount)
 {
-    int fd = open("./data/customer.data", O_RDWR); // Open the file in read-write mode
+    int fd = open("./data/customer.data", O_RDWR); 
     if (fd < 0)
     {
         perror("Failed to open the file");
@@ -115,7 +107,7 @@ int deposit(int uid, float amount)
     }
 
     if (flock(fd, LOCK_EX) < 0)
-    { // Acquire exclusive lock
+    { 
         perror("Failed to acquire lock");
         close(fd);
         return -1;
@@ -123,16 +115,14 @@ int deposit(int uid, float amount)
 
     struct customer c;
     int found = 0;
-    off_t position; // Store the position of the matching record
-
-    // Read the file line by line, matching the userID
+    off_t position; 
     while (read(fd, &c, sizeof(struct customer)) == sizeof(struct customer))
     {
         if (c.userID == uid)
         {
             found = 1;
-            c.balance += amount;                                      // Update the balance
-            position = lseek(fd, -sizeof(struct customer), SEEK_CUR); // Move back to overwrite
+            c.balance += amount;                                    
+            position = lseek(fd, -sizeof(struct customer), SEEK_CUR); 
             if (position == -1)
             {
                 perror("lseek failed");
@@ -144,7 +134,7 @@ int deposit(int uid, float amount)
                 perror("Failed to write updated record");
                 close(fd);
                 return -1;
-            } // Write updated struct back
+            } 
             log_transaction(uid, "Deposit", amount);
             break;
         }
@@ -158,13 +148,12 @@ int deposit(int uid, float amount)
         return -1;
     }
 
-    return found ? 0 : -1;
+    return 0;
 }
 
 int withdraw(int uid, float amount)
 {
 
-    // Open the file in read-write mode
     int fd = open("./data/customer.data", O_RDWR);
     if (fd < 0)
     {
@@ -172,7 +161,6 @@ int withdraw(int uid, float amount)
         return -1;
     }
 
-    // Apply an exclusive lock on the file to avoid race conditions
     if (flock(fd, LOCK_EX) < 0)
     {
         perror("Failed to lock the file");
@@ -180,26 +168,23 @@ int withdraw(int uid, float amount)
         return -1;
     }
 
-    struct customer c; // Struct to store customer data
-    int found = 0;     // Flag to track if userID is found
+    struct customer c; 
+    int found = 0;  
     off_t position;
-    // Read the file record by record
     while (read(fd, &c, sizeof(struct customer)) == sizeof(struct customer))
     {
         if (c.userID == uid)
-        { // Match userID
+        {
             if (c.balance < amount)
             {
-                flock(fd, LOCK_UN); // Unlock the file before returning
+                flock(fd, LOCK_UN);
                 close(fd);
-                return -1; // Return -1 if balance is insufficient
+                return -1;
             }
 
-            // Deduct the amount from the balance
             c.balance -= amount;
 
-            // Move the file pointer back to overwrite the record
-            position = lseek(fd, -sizeof(struct customer), SEEK_CUR); // Move back to overwrite
+            position = lseek(fd, -sizeof(struct customer), SEEK_CUR); 
             if (position == -1)
             {
                 perror("lseek failed");
@@ -207,37 +192,34 @@ int withdraw(int uid, float amount)
                 return -1;
             }
 
-            // Write the updated record back to the file
             if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer))
             {
                 perror("Failed to write updated record");
-                flock(fd, LOCK_UN); // Unlock the file before returning
+                flock(fd, LOCK_UN);
                 close(fd);
                 return -1;
             }
             found = 1;
             log_transaction(uid, "Withdraw", amount);
-            break; // Exit the loop since the record is found and updated
+            break; 
         }
     }
 
-    // Unlock the file after completing operations
     flock(fd, LOCK_UN);
 
-    close(fd); // Close the file
+    close(fd); 
 
     if (!found)
     {
         printf("User ID %d not found.\n", uid);
-        return -1; // Return -1 if userID is not found
+        return -1; 
     }
 
-    return 0; // Return 0 for successful withdrawal
+    return 0; 
 }
 
 int transfer(int from_uid, int to_uid, float amount)
 {
-    // Open the file in read-write mode
     int fd = open("./data/customer.data", O_RDWR);
     if (fd < 0)
     {
@@ -245,7 +227,6 @@ int transfer(int from_uid, int to_uid, float amount)
         return -1;
     }
     printf("\nFrom user: %d to user: %d", from_uid, to_uid);
-    // Apply an exclusive lock to avoid race conditions
     if (flock(fd, LOCK_EX) < 0)
     {
         perror("Failed to lock the file");
@@ -261,16 +242,16 @@ int transfer(int from_uid, int to_uid, float amount)
     {
         printf("From UserID : %d, amount : %.2f\n", c.userID, c.balance);
         if (c.userID == from_uid)
-        { // Match userID
+        {
             if (c.balance < amount)
             {
                 printf("Insufficient funds. Transfer aborted.\n");
-                flock(fd, LOCK_UN); // Unlock before returning
+                flock(fd, LOCK_UN); 
                 close(fd);
                 return -1;
             }
             found_from = 1;
-            break; // Exit the loop since user is found
+            break;
         }
     }
 
@@ -287,9 +268,9 @@ int transfer(int from_uid, int to_uid, float amount)
         {
             printf("\nTo User ID %d found. Current balance: %.2f\n", to_customer.userID, to_customer.balance);
             found_to = 1;
-            to_customer.balance += amount; // Update the balance
+            to_customer.balance += amount; 
             printf("\nUpdated balance: %.2f\n", to_customer.balance);
-            to_position = lseek(fd, -sizeof(struct customer), SEEK_CUR); // Move back to overwrite
+            to_position = lseek(fd, -sizeof(struct customer), SEEK_CUR); 
             if (to_position == -1)
             {
                 perror("lseek failed");
@@ -301,7 +282,7 @@ int transfer(int from_uid, int to_uid, float amount)
                 perror("Failed to write updated record");
                 close(fd);
                 return -1;
-            } // Write updated struct back
+            }
             printf("To transfer successful. New balance: %.2f\n", to_customer.balance);
             log_transaction(to_uid, "Recieved Transfer", amount);
             break;
@@ -321,14 +302,12 @@ int transfer(int from_uid, int to_uid, float amount)
         {
             printf("Checking at From User ID %d found. Current balance: %.2f\n", from_customer.userID, from_customer.balance);
             if (from_customer.userID == from_uid)
-            { // Match userID
+            { 
                 printf("From User ID %d found. Current balance: %.2f\n", from_customer.userID, from_customer.balance);
-                // Deduct the amount from the balance
                 from_customer.balance -= amount;
                 printf("New balance after withdrawal: %.2f\n", from_customer.balance);
 
-                // Move the file pointer back to overwrite the record
-                form_position = lseek(fd, -sizeof(struct customer), SEEK_CUR); // Move back to overwrite
+                form_position = lseek(fd, -sizeof(struct customer), SEEK_CUR); 
                 if (form_position == -1)
                 {
                     perror("lseek failed");
@@ -336,23 +315,21 @@ int transfer(int from_uid, int to_uid, float amount)
                     return -1;
                 }
 
-                // Write the updated record back to the file
                 if (write(fd, &from_customer, sizeof(struct customer)) != sizeof(struct customer))
                 {
                     perror("Failed to write updated record");
-                    flock(fd, LOCK_UN); // Unlock the file before returning
+                    flock(fd, LOCK_UN);
                     close(fd);
                     return -1;
                 }
                 printf("From transfer successful. New balance: %.2f\n", from_customer.balance);
                 found_from = 1;
                 log_transaction(from_uid, "Transfer", amount);
-                break; // Exit the loop since the record is found and updated
+                break;
             }
         }
     }
 
-    // Unlock the file and close
     flock(fd, LOCK_UN);
     close(fd);
 
@@ -409,10 +386,10 @@ int change_cust_password(int uid, const char *new_password)
     }
 
     struct flock lock;
-    lock.l_type = F_WRLCK; // Write lock
+    lock.l_type = F_WRLCK;
     lock.l_whence = SEEK_SET;
     lock.l_start = 0;
-    lock.l_len = 0; // Lock the whole file
+    lock.l_len = 0;
 
     if (fcntl(fd, F_SETLK, &lock) == -1)
     {
@@ -425,7 +402,6 @@ int change_cust_password(int uid, const char *new_password)
     int found = 0;
     off_t position;
 
-    // Read and modify the password
     while (read(fd, &c, sizeof(struct customer)) == sizeof(struct customer))
     {
         if (c.userID == uid)
@@ -442,7 +418,7 @@ int change_cust_password(int uid, const char *new_password)
             if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer))
             {
                 perror("Failed to write updated record");
-                flock(fd, LOCK_UN); // Unlock the file before returning
+                flock(fd, LOCK_UN);
                 close(fd);
                 return -1;
             }
@@ -451,7 +427,7 @@ int change_cust_password(int uid, const char *new_password)
         }
     }
 
-    lock.l_type = F_UNLCK; // Unlock
+    lock.l_type = F_UNLCK; 
     fcntl(fd, F_SETLK, &lock);
     close(fd);
     if (!found)
@@ -464,88 +440,98 @@ int change_cust_password(int uid, const char *new_password)
     return 0;
 }
 
-int add_feedback(int customerID, const char *message) {
-    // Open the feedback file in append mode (create if not exists)
+int add_feedback(int customerID, const char *message) 
+{
     int fd = open("./data/feedback.data", O_WRONLY | O_APPEND | O_CREAT, 0644);
-    if (fd == -1) {
+    if (fd == -1) 
+    {
         perror("Error opening feedback file");
         return -1;
     }
 
-    // Apply a write lock on the file
-    if (flock(fd, LOCK_EX) < 0) {
+    if (flock(fd, LOCK_EX) < 0) 
+    {
         perror("Error locking feedback file");
         close(fd);
         return -1;
     }
 
-    // Prepare a new feedback entry
-    static int feedback_counter = 0;  // Feedback ID counter (should persist)
+    static int feedback_counter = 0; 
     struct feedback new_feedback;
-    new_feedback.feedbackID = ++feedback_counter;  // Increment feedback ID
+    new_feedback.feedbackID = ++feedback_counter; 
     new_feedback.customerID = customerID;
     strncpy(new_feedback.message, message, sizeof(new_feedback.message) - 1);
-    new_feedback.message[sizeof(new_feedback.message) - 1] = '\0';  // Ensure null termination
+    new_feedback.message[sizeof(new_feedback.message) - 1] = '\0'; 
     strncpy(new_feedback.status, "Pending", sizeof(new_feedback.status) - 1);
-    new_feedback.status[sizeof(new_feedback.status) - 1] = '\0';  // Ensure null termination
+    new_feedback.status[sizeof(new_feedback.status) - 1] = '\0'; 
 
-    // Write the feedback entry to the file
-    if (write(fd, &new_feedback, sizeof(struct feedback)) != sizeof(struct feedback)) {
+    if (write(fd, &new_feedback, sizeof(struct feedback)) != sizeof(struct feedback)) 
+    {
         perror("Failed to write feedback entry");
-        flock(fd, LOCK_UN);  // Unlock the file
+        flock(fd, LOCK_UN);
         close(fd);
         return -1;
     }
 
-    // Unlock and close the file
     flock(fd, LOCK_UN);
     close(fd);
 
-    return 0;  // Feedback added successfully
+    return 0; 
 }
 
-int view_transaction_history(int sock, int username) {
-    int fd = open("./data/transaction.log", O_RDONLY);
-    if (fd == -1) {
+int view_transaction_history(int sock, int userID) 
+{
+    int fd = open("./data/transaction.data", O_RDONLY); 
+    if (fd == -1) 
+    {
         perror("Error opening transactions file");
         return -1;
     }
 
     struct flock lock;
-    lock.l_type = F_RDLCK; // Read lock
+    lock.l_type = F_RDLCK;
     lock.l_whence = SEEK_SET;
     lock.l_start = 0;
-    lock.l_len = 0; // Lock the whole file
+    lock.l_len = 0;
 
-    if (fcntl(fd, F_SETLK, &lock) == -1) {
+    if (fcntl(fd, F_SETLK, &lock) == -1) 
+    {
         perror("Error locking file");
         close(fd);
         return -1;
     }
 
-    char buffer[256];
-    ssize_t bytes;
-    int transaction_found = 0; // Flag to check if transactions are found
-    char user_str[20];  // Buffer to store the username as string
-    snprintf(user_str, sizeof(user_str), "%d", username);
+    struct transaction txn;
+    int transaction_found = 0;
+    char buffer[256]; 
 
+    while (read(fd, &txn, sizeof(struct transaction)) == sizeof(struct transaction)) 
+    {
+        if (txn.customerID == userID) 
+        {
+            snprintf(buffer, sizeof(buffer), "Transaction ID: %d, Type: %s, Amount: %.2f, Timestamp: %s\n", txn.transactionID, txn.type, txn.amount, txn.timestamp);
 
-    while ((bytes = read(fd, buffer, sizeof(buffer) - 1)) > 0) {
-        buffer[bytes] = '\0';  // Null-terminate the string
-
-        // Check if the line contains relevant userID
-        if ((strstr(buffer, "User ID:") && strstr(buffer, user_str)) ||
-            (strstr(buffer, "to User ID:") && strstr(buffer, user_str))) {
-            write(sock, buffer, strlen(buffer));  // Send the transaction
+            if (write(sock, buffer, strlen(buffer)) == -1) 
+            {
+                perror("Failed to send transaction data");
+                flock(fd, LOCK_UN); 
+                close(fd);
+                return -1;
+            }
             transaction_found = 1;
         }
     }
 
-    if (!transaction_found) {
-        snprintf(buffer, sizeof(buffer), "No transaction history found for UserID: %d\n", username);
-            write(sock, buffer, strlen(buffer));
+    if (!transaction_found) 
+    {
+        snprintf(buffer, sizeof(buffer), "No transaction history found for UserID: %d\n", userID);
+        write(sock, buffer, strlen(buffer));
     }
-    return 0;
+
+    flock(fd, LOCK_UN);
+    close(fd);
+
+    return 0;  
 }
 
 void handle_logout(int client_sock)
@@ -554,13 +540,7 @@ void handle_logout(int client_sock)
     printf("User logged out.\n");
 }
 
-void exit_application()
-{
-    printf("Exiting the application. Goodbye!\n");
-    exit(0);
-}
 
-// Handle customer requests
 void handle_customer_requests(int sock, const char *user_id)
 {
     int id = atoi(user_id);
@@ -580,11 +560,10 @@ void handle_customer_requests(int sock, const char *user_id)
         {
             float amount;
             int bytes_read = read(sock, buffer, sizeof(buffer) - 1);
-            buffer[bytes_read] = '\0'; // Null-terminate the string
-            // Convert to float and print for debugging
+            buffer[bytes_read] = '\0';
             sscanf(buffer, "%f", &amount);
 
-            int status = deposit(id, amount); // Pass id and amount
+            int status = deposit(id, amount);
             if(status == 0)
                 snprintf(buffer, sizeof(buffer), "Money deposited successfuly");
             else
@@ -596,10 +575,9 @@ void handle_customer_requests(int sock, const char *user_id)
         {
             float amount;
             int bytes_read = read(sock, buffer, sizeof(buffer) - 1);
-            buffer[bytes_read] = '\0'; // Null-terminate the string
-            // Convert to float and print for debugging
+            buffer[bytes_read] = '\0';
             sscanf(buffer, "%f", &amount);
-            int status = withdraw(id, amount); // Pass id and amount
+            int status = withdraw(id, amount);
             if(status == 0)
                 snprintf(buffer, sizeof(buffer), "Money withdrawn successfuly");
             else
@@ -617,7 +595,7 @@ void handle_customer_requests(int sock, const char *user_id)
             bytes_read = read(sock, buffer, sizeof(buffer) - 1);
             buffer[bytes_read] = '\0';
             sscanf(buffer, "%f", &amount);
-            int status = transfer(id, to_user, amount); // Pass id, recipient and amount
+            int status = transfer(id, to_user, amount);
             if (status == -1)
                 snprintf(buffer, sizeof(buffer), "Failed to transfer funds\n");
             else
@@ -628,10 +606,9 @@ void handle_customer_requests(int sock, const char *user_id)
         {
             float amount;
             int bytes_read = read(sock, buffer, sizeof(buffer) - 1);
-            buffer[bytes_read] = '\0'; // Null-terminate the string
-            // Convert to float and print for debugging
+            buffer[bytes_read] = '\0'; 
             sscanf(buffer, "%f", &amount);
-            int status = apply_loan(id, amount); // Pass id and amount
+            int status = apply_loan(id, amount); 
             if(status == 0)
                 snprintf(buffer, sizeof(buffer), "Applied for loan successfuly");
             else
@@ -639,7 +616,8 @@ void handle_customer_requests(int sock, const char *user_id)
 
             write(sock, buffer, strlen(buffer));
         }
-        else if (strcmp(buffer, "CHANGE_PWD") == 0) {
+        else if (strcmp(buffer, "CHANGE_PWD") == 0) 
+        {
             char new_pwd[50];
             read(sock, new_pwd, sizeof(new_pwd));
             new_pwd[sizeof(new_pwd) - 1] = '\0';
@@ -654,9 +632,16 @@ void handle_customer_requests(int sock, const char *user_id)
                 snprintf(buffer, sizeof(buffer), "Failed to change password try again...\n");
             write(sock, buffer, strlen(buffer));
         }
-        else if (strcmp(buffer, "FEEDBACK") == 0) {
+        else if (strcmp(buffer, "FEEDBACK") == 0) 
+        {
             char feedback[500];
             read(sock, feedback, sizeof(feedback));
+            feedback[sizeof(feedback) - 1] = '\0';
+            size_t len = strlen(feedback);
+            if (len > 0 && feedback[len - 1] == '\n') 
+            {
+                feedback[len - 1] = '\0';
+            }
             int status = add_feedback(id, feedback);
             if(status == 0)
                 snprintf(buffer, sizeof(buffer), "Successfully Submitted");
@@ -664,11 +649,15 @@ void handle_customer_requests(int sock, const char *user_id)
                 snprintf(buffer, sizeof(buffer), "Failed to submit feedback");
             write(sock, buffer, strlen(buffer));
         }
-        else if (strcmp(buffer, "VIEW_TRANSACTION") == 0) {
+        else if (strcmp(buffer, "VIEW_TRANSACTION") == 0) 
+        {
             int status = view_transaction_history(sock, id);
             if (status == -1)
+            {   
                 snprintf(buffer, sizeof(buffer), "Unable to show transaction history due to unknown error");
-            write(sock, buffer, strlen(buffer));
+                write(sock, buffer, strlen(buffer));
+            }
+            write(sock, "END", strlen("END"));
         }
         else if (strcmp(buffer, "LOGOUT") == 0)
         {
@@ -681,27 +670,28 @@ void handle_customer_requests(int sock, const char *user_id)
 /////////////////////////Customer/////////////////////////
 
 /////////////////////////Employee/////////////////////////
-int add_customer(int uid, const char *fname, const char *lname, const char *pwd, float bal, float loan, const char *status) {
+int add_customer(int uid, const char *fname, const char *lname, const char *pwd, float bal) 
+{
     int fd = open("./data/customer.data", O_WRONLY | O_APPEND | O_CREAT, 0644);
-    if (fd < 0) {
+    if (fd < 0) 
+    {
         perror("Failed to open the customer file");
         return -1;
     }
 
-    // Apply an exclusive lock to avoid race conditions
     struct flock lock;
     lock.l_type = F_WRLCK;
     lock.l_whence = SEEK_END;
     lock.l_start = 0;
-    lock.l_len = 0;  // Lock the entire file
+    lock.l_len = 0; 
 
-    if (fcntl(fd, F_SETLKW, &lock) == -1) {
+    if (fcntl(fd, F_SETLKW, &lock) == -1) 
+    {
         perror("Failed to lock the file");
         close(fd);
         return -1;
     }
 
-    // Create a new customer struct and fill it with provided data
     struct customer new_customer;
     new_customer.userID = uid;
     strncpy(new_customer.firstName, fname, sizeof(new_customer.firstName) - 1);
@@ -711,28 +701,28 @@ int add_customer(int uid, const char *fname, const char *lname, const char *pwd,
     strncpy(new_customer.password, pwd, sizeof(new_customer.password) - 1);
     new_customer.password[sizeof(new_customer.password) - 1] = '\0';
     new_customer.balance = bal;
-    new_customer.loan = loan;
-    strncpy(new_customer.status, status, sizeof(new_customer.status) - 1);
+    new_customer.loan = 0;
+    strncpy(new_customer.status, "Active", sizeof(new_customer.status) - 1);
     new_customer.status[sizeof(new_customer.status) - 1] = '\0';
 
-    // Write the new customer data to the file
-    if (write(fd, &new_customer, sizeof(struct customer)) != sizeof(struct customer)) {
+    if (write(fd, &new_customer, sizeof(struct customer)) != sizeof(struct customer)) 
+    {
         perror("Failed to write new customer to the file");
-        fcntl(fd, F_UNLCK, &lock);  // Unlock the file before returning
+        fcntl(fd, F_UNLCK, &lock); 
         close(fd);
         return -1;
     }
 
-    // Unlock the file and close the descriptor
     lock.l_type = F_UNLCK;
     fcntl(fd, F_SETLK, &lock);
     close(fd);
 
     printf("New customer (ID: %d) added successfully.\n", uid);
-    return 0;  // Success
+    return 0; 
 }
 
-int fetch_assigned_loan_details(int *loan_ids, int loan_count, char *details) {
+int fetch_assigned_loan_details(int *loan_ids, int loan_count, char *details) 
+{
     struct loan ln;
     FILE *loan_file = fopen("./data/loan.data", "rb");
     if (!loan_file) {
@@ -740,19 +730,20 @@ int fetch_assigned_loan_details(int *loan_ids, int loan_count, char *details) {
         return -1;
     }
 
-    char temp[100];  // Temporary buffer for formatting loan details
+    char temp[100];
     strcpy(details, "Assigned Loan Details:\n");
 
-    // Iterate over the assigned loan IDs
-    for (int i = 0; i < loan_count; i++) {
-        rewind(loan_file);  // Reset file pointer to the beginning
+    for (int i = 0; i < loan_count; i++) 
+    {
+        rewind(loan_file);
 
-        // Search for the matching loan in loan.data
-        while (fread(&ln, sizeof(struct loan), 1, loan_file)) {
-            if (ln.userID == loan_ids[i]) {
+        while (fread(&ln, sizeof(struct loan), 1, loan_file)) 
+        {
+            if (ln.userID == loan_ids[i]) 
+            {
                 sprintf(temp, "Loan ID: %d, Amount: %.2f, Status: %s\n",
                         ln.userID, ln.amount, ln.status);
-                strcat(details, temp);  // Append loan details
+                strcat(details, temp);  
                 break;
             }
         }
@@ -762,8 +753,8 @@ int fetch_assigned_loan_details(int *loan_ids, int loan_count, char *details) {
     return 0;
 }
 
-// Function to view employee loans
-int view_employee_loans(int employee_id, char *details) {
+int view_employee_loans(int employee_id, char *details) 
+{
     struct employee emp;
     FILE *emp_file = fopen("./data/employee.data", "rb");
     if (!emp_file) {
@@ -771,20 +762,22 @@ int view_employee_loans(int employee_id, char *details) {
         return -1;
     }
 
-    // Search for the matching employee by ID
-    while (fread(&emp, sizeof(struct employee), 1, emp_file)) {
-        if (emp.employeeID == employee_id) {
+    while (fread(&emp, sizeof(struct employee), 1, emp_file)) 
+    {
+        if (emp.employeeID == employee_id) 
+        {
             fclose(emp_file);
             return fetch_assigned_loan_details(emp.assigned_loans, emp.loan_count, details);
         }
     }
 
     fclose(emp_file);
-    return -1;  // Employee not found
+    return -1; 
 }
 
 
-int update_loan_status(int loan_id, const char *new_status) {
+int update_loan_status(int loan_id, const char *new_status) 
+{
     struct loan ln;
     int loan_found = 0;
 
@@ -794,13 +787,12 @@ int update_loan_status(int loan_id, const char *new_status) {
         return -1;
     }
 
-    // Search for the loan in the file
-    while (fread(&ln, sizeof(struct loan), 1, loan_file)) {
-        if (ln.userID == loan_id) {
+    while (fread(&ln, sizeof(struct loan), 1, loan_file)) 
+    {
+        if (ln.userID == loan_id) 
+        {
             loan_found = 1;
-            strcpy(ln.status, new_status);  // Update loan status
-
-            // Move file pointer back to overwrite the current record
+            strcpy(ln.status, new_status); 
             fseek(loan_file, -sizeof(struct loan), SEEK_CUR);
             fwrite(&ln, sizeof(struct loan), 1, loan_file);
             break;
@@ -808,28 +800,28 @@ int update_loan_status(int loan_id, const char *new_status) {
     }
 
     fclose(loan_file);
-    return loan_found ? ln.amount : -1;  // Return loan amount if found, else -1
+    return loan_found ? ln.amount : -1; 
 }
 
-// Function to credit the loan amount to the customer's balance
-int credit_to_customer(int cust_id, float amount) {
+int credit_to_customer(int cust_id, float amount) 
+{
     struct customer cust;
     int customer_found = 0;
 
     FILE *customer_file = fopen("./data/customer.data", "rb+");
-    if (!customer_file) {
+    if (!customer_file) 
+    {
         perror("Error opening customer data file");
         return -1;
     }
 
-    // Search for the customer in the file
-    while (fread(&cust, sizeof(struct customer), 1, customer_file)) {
-        if (cust.userID == cust_id) {
+    while (fread(&cust, sizeof(struct customer), 1, customer_file)) 
+    {
+        if (cust.userID == cust_id) 
+        {
             customer_found = 1;
-            cust.balance += amount;  // Credit the loan amount to the balance
+            cust.balance += amount;
             cust.loan += amount;
-
-            // Move file pointer back to overwrite the current record
             fseek(customer_file, -sizeof(struct customer), SEEK_CUR);
             fwrite(&cust, sizeof(struct customer), 1, customer_file);
             break;
@@ -837,53 +829,52 @@ int credit_to_customer(int cust_id, float amount) {
     }
 
     fclose(customer_file);
-    return customer_found ? 0 : -1;  // Return 0 on success, -1 on failure
+    return customer_found ? 0 : -1;
 }
 
-void view_customer_transactions(int sock) {
+void view_customer_transactions(int sock) 
+{
     char buffer[BUFFER_SIZE];
     int cust_id;
 
-    // Receive the Customer ID from the client
-    int bytes_read = read(sock, buffer, BUFFER_SIZE);
-    if (bytes_read <= 0) {
-        perror("Error reading Customer ID from client");
+    if (read(sock, buffer, sizeof(buffer) - 1) <= 0) 
+    {
+        perror("Error reading User ID from client");
         close(sock);
         return;
     }
-    buffer[bytes_read] = '\0';
-    cust_id = atoi(buffer);
+    sscanf(buffer, "%d", &cust_id);
 
-    // Open the transaction data file
-    FILE *file = fopen("./data/transactions.log", "r");
-    if (!file) {
+    FILE *file = fopen("./data/transaction.data", "rb");
+    if (!file) 
+    {
         perror("Error opening transactions file");
         strcpy(buffer, "Error opening transactions file.\n");
         write(sock, buffer, strlen(buffer));
         return;
     }
 
-    // Search for all transactions of the given customer ID
     struct transaction txn;
     int found = 0;
     char response[BUFFER_SIZE] = "";
 
-    while (fread(&txn, sizeof(struct transaction), 1, file)) {
-        if (txn.customerID == cust_id) {
+    while (fread(&txn, sizeof(struct transaction), 1, file)) 
+    {
+        if (txn.customerID == cust_id) 
+        {
             found = 1;
             char temp[200];
-            snprintf(temp, sizeof(temp), 
-                     "ID: %d | Type: %s | Amount: %.2f | Date: %s\n",
-                     txn.transactionID, txn.type, txn.amount, txn.timestamp);
+            snprintf(temp, sizeof(temp), "ID: %d | Type: %s | Amount: %.2f | Date: %s\n", txn.transactionID, txn.type, txn.amount, txn.timestamp);
             strcat(response, temp);
         }
     }
     fclose(file);
 
-    // Send response back to the client
-    if (!found) {
+    if (!found) 
+    {
         strcpy(response, "No transactions found for this customer.\n");
     }
+    printf("%s",response);
     write(sock, response, strlen(response));
 }
 
@@ -898,10 +889,10 @@ int change_emp_password(int uid, const char *new_password)
     }
 
     struct flock lock;
-    lock.l_type = F_WRLCK; // Write lock
+    lock.l_type = F_WRLCK;
     lock.l_whence = SEEK_SET;
     lock.l_start = 0;
-    lock.l_len = 0; // Lock the whole file
+    lock.l_len = 0;
 
     if (fcntl(fd, F_SETLK, &lock) == -1)
     {
@@ -914,7 +905,6 @@ int change_emp_password(int uid, const char *new_password)
     int found = 0;
     off_t position;
 
-    // Read and modify the password
     while (read(fd, &c, sizeof(struct employee)) == sizeof(struct employee))
     {
         if (c.employeeID == uid)
@@ -931,7 +921,7 @@ int change_emp_password(int uid, const char *new_password)
             if (write(fd, &c, sizeof(struct employee)) != sizeof(struct employee))
             {
                 perror("Failed to write updated record");
-                flock(fd, LOCK_UN); // Unlock the file before returning
+                flock(fd, LOCK_UN);
                 close(fd);
                 return -1;
             }
@@ -940,7 +930,7 @@ int change_emp_password(int uid, const char *new_password)
         }
     }
 
-    lock.l_type = F_UNLCK; // Unlock
+    lock.l_type = F_UNLCK;
     fcntl(fd, F_SETLK, &lock);
     close(fd);
     if (!found)
@@ -954,11 +944,11 @@ int change_emp_password(int uid, const char *new_password)
 }
 
 
-void delete_customer(int custID, int sock) {
+void delete_customer(int custID, int sock) 
+{
     char buffer[BUFFER_SIZE];
     int found = 0;
 
-    // Open the employee data file
     FILE *fp = fopen("./data/customer.data", "rb");
     FILE *temp = fopen("./data/temp_customer.data", "wb");
 
@@ -972,11 +962,14 @@ void delete_customer(int custID, int sock) {
 
     struct customer c;
 
-    // Read through the file and copy all except the matching Employee ID
-    while (fread(&c, sizeof(struct customer), 1, fp)) {
-        if (c.userID == custID) {
-            found = 1; // Mark as found and skip writing to the new file
-        } else {
+    while (fread(&c, sizeof(struct customer), 1, fp)) 
+    {
+        if (c.userID == custID) 
+        {
+            found = 1; 
+        } 
+        else 
+        {
             fwrite(&c, sizeof(struct customer), 1, temp);
         }
     }
@@ -984,17 +977,18 @@ void delete_customer(int custID, int sock) {
     fclose(fp);
     fclose(temp);
 
-    // Replace original file with the updated file
-    if (found) {
+    if (found) 
+    {
         remove("./data/customer.data");
         rename("./data/temp_customer.data", "./data/customer.data");
         strcpy(buffer, "Customer deleted successfully.\n");
-    } else {
-        remove("temp_customer.data");
+    } 
+    else 
+    {
+        remove("./data/temp_customer.data");
         strcpy(buffer, "Customer not found.\n");
     }
 
-    // Send the response back to the client
     write(sock, buffer, strlen(buffer));
 }
 
@@ -1046,28 +1040,20 @@ void handle_employee_requests(int sock, const char *user_id)
             buffer[bytes_read] = '\0';
             sscanf(buffer, "%f", &bal);
 
-            bytes_read = read(sock, buffer, sizeof(buffer) - 1);
-            buffer[bytes_read] = '\0';
-            sscanf(buffer, "%f", &loan);
-
-            bytes_read = read(sock, status, sizeof(status) - 1);
-            status[bytes_read] = '\0';
-            status[strcspn(status, "\n")] = '\0';
-
-            if (add_customer(uid, fname, lname, pwd, bal, loan, status) == 0) {
+            if (add_customer(uid, fname, lname, pwd, bal) == 0) {
                 strcpy(buffer, "Customer added successfully.\n");
             } else {
                 strcpy(buffer, "Failed to add customer.\n");
             }
             write(sock, buffer, strlen(buffer));
         }
-        else if (strcmp(buffer, "MANAGE_CUSTOMER") == 0) {
+        else if (strcmp(buffer, "MANAGE_CUSTOMER") == 0) 
+        {
             int uid;
-            char new_status[20], new_password[50], buffer[BUFFER_SIZE];
+            char new_fname[50], new_lname[50], new_status[20], new_password[50], buffer[BUFFER_SIZE];
             float new_balance, new_loan;
             int option, bytes_read;
 
-            // Receive the customer ID from the client
             bytes_read = read(sock, buffer, sizeof(buffer) - 1);
             buffer[bytes_read] = '\0';
             sscanf(buffer, "%d", &uid);
@@ -1085,7 +1071,7 @@ void handle_employee_requests(int sock, const char *user_id)
             lock.l_type = F_WRLCK;
             lock.l_whence = SEEK_SET;
             lock.l_start = 0;
-            lock.l_len = 0; // Lock the entire file
+            lock.l_len = 0;
 
             if (fcntl(fd, F_SETLK, &lock) == -1) {
                 perror("Error locking customer file");
@@ -1098,16 +1084,18 @@ void handle_employee_requests(int sock, const char *user_id)
             int found = 0;
             off_t position;
 
-            // Search for the customer by ID
-            while (read(fd, &c, sizeof(struct customer)) == sizeof(struct customer)) {
-                if (c.userID == uid) {
+            while (read(fd, &c, sizeof(struct customer)) == sizeof(struct customer)) 
+            {
+                if (c.userID == uid) 
+                {
                     found = 1;
                     position = lseek(fd, -sizeof(struct customer), SEEK_CUR);
                     break;
                 }
             }
 
-            if (!found) {
+            if (!found) 
+            {
                 snprintf(buffer, sizeof(buffer), "Customer with ID %d not found.\n", uid);
                 write(sock, buffer, strlen(buffer));
                 flock(fd, F_UNLCK);
@@ -1115,95 +1103,102 @@ void handle_employee_requests(int sock, const char *user_id)
                 return;
             }
 
-            // Send the customer details to the client
             snprintf(buffer, sizeof(buffer), "ID: %d\nName: %s %s\nBalance: %.2f\nLoan: %.2f\nStatus: %s\n", c.userID, c.firstName, c.lastName, c.balance, c.loan, c.status);
             write(sock, buffer, strlen(buffer));
 
-            // Receive the option from the client (1: Modify, 2: Delete, 3: Reset Password, 4: Exit)
             bytes_read = read(sock, buffer, sizeof(buffer) - 1);
             buffer[bytes_read] = '\0';
             option = atoi(buffer);
 
-            switch (option) {
-                case 1: // Modify Customer
-                    // Receive new balance
+            switch (option) 
+            {
+                case 1:
+                    read(sock, new_fname, sizeof(new_fname));
+                    new_fname[sizeof(new_fname) - 1] = '\0';
+                    size_t len = strlen(new_fname);
+                    if (len > 0 && new_fname[len - 1] == '\n') 
+                    {
+                        new_fname[len - 1] = '\0';
+                    }
+                    memset(buffer, 0, sizeof(buffer));
+
+                    read(sock, new_lname, sizeof(new_lname));
+                    new_lname[sizeof(new_lname) - 1] = '\0';
+                    len = strlen(new_lname);
+                    if (len > 0 && new_lname[len - 1] == '\n') 
+                    {
+                        new_lname[len - 1] = '\0';
+                    }
+                    memset(buffer, 0, sizeof(buffer));
+
                     bytes_read = read(sock, buffer, sizeof(buffer) - 1);
                     buffer[bytes_read] = '\0';
                     sscanf(buffer, "%f", &new_balance);
+                    memset(buffer, 0, sizeof(buffer));
 
-                    // Receive new loan amount
                     bytes_read = read(sock, buffer, sizeof(buffer) - 1);
                     buffer[bytes_read] = '\0';
                     sscanf(buffer, "%f", &new_loan);
+                    memset(buffer, 0, sizeof(buffer));
 
-                    // Receive new status
                     read(sock, new_status, sizeof(new_status));
                     new_status[sizeof(new_status) - 1] = '\0';
-                    size_t len = strlen(new_status);
-                    if (len > 0 && new_status[len - 1] == '\n') {
+                    len = strlen(new_status);
+                    if (len > 0 && new_status[len - 1] == '\n') 
+                    {
                         new_status[len - 1] = '\0';
                     }
 
-                    // Update the customer struct
+                    strncpy(c.firstName, new_fname, sizeof(c.firstName) - 1);
+                    strncpy(c.lastName, new_lname, sizeof(c.lastName) - 1);
                     c.balance = new_balance;
                     c.loan = new_loan;
                     strncpy(c.status, new_status, sizeof(c.status) - 1);
 
-                    // Write the modified customer back to the file
                     lseek(fd, position, SEEK_SET);
-                    if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer)) {
+                    if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer)) 
+                    {
                         perror("Failed to write updated customer record");
                         strcpy(buffer, "Error: Failed to update customer.\n");
                         write(sock, buffer, strlen(buffer));
-                    } else {
+                    } 
+                    else 
+                    {
                         strcpy(buffer, "Customer details updated successfully.\n");
                         write(sock, buffer, strlen(buffer));
                     }
                     break;
 
-                case 2: // Delete Customer
-                    // Mark the customer as inactive
-                    strncpy(c.status, "Inactive", sizeof(c.status) - 1);
-
-                    // Write the updated customer back to the file
-                    lseek(fd, position, SEEK_SET);
-                    if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer)) {
-                        perror("Failed to delete customer");
-                        strcpy(buffer, "Error: Failed to delete customer.\n");
-                        write(sock, buffer, strlen(buffer));
-                    } else {
-                        strcpy(buffer, "Customer deleted successfully.\n");
-                        write(sock, buffer, strlen(buffer));
-                    }
+                case 2: 
+                    delete_customer(uid, sock);
                     break;
 
-                case 3: // Reset Password
-                    // Receive the new password
+                case 3: 
                     bytes_read = read(sock, new_password, sizeof(new_password) - 1);
                     new_password[bytes_read] = '\0';
-                    new_password[strcspn(new_password, "\n")] = '\0'; 
-                    new_password[sizeof(new_password) - 1] = '\0';
                     len = strlen(new_password);
-                    if (len > 0 && new_password[len - 1] == '\n') {
+                    if (len > 0 && new_password[len - 1] == '\n') 
+                    {
                         new_password[len - 1] = '\0';
                     }
 
-                    // Update the password in the customer struct
                     strncpy(c.password, new_password, sizeof(c.password) - 1);
 
-                    // Write the updated password to the file
                     lseek(fd, position, SEEK_SET);
-                    if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer)) {
+                    if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer)) 
+                    {
                         perror("Failed to reset password");
                         strcpy(buffer, "Error: Failed to reset password.\n");
                         write(sock, buffer, strlen(buffer));
-                    } else {
+                    } 
+                    else 
+                    {
                         strcpy(buffer, "Password reset successfully.\n");
                         write(sock, buffer, strlen(buffer));
                     }
                     break;
 
-                case 4: // Exit
+                case 4:
                     strcpy(buffer, "Exiting customer management.\n");
                     write(sock, buffer, strlen(buffer));
                     break;
@@ -1213,58 +1208,55 @@ void handle_employee_requests(int sock, const char *user_id)
                     write(sock, buffer, strlen(buffer));
                     break;
             }
-
-            // Unlock and close the file
             flock(fd, F_UNLCK);
             close(fd);
         }
         else if (strcmp(buffer, "VIEW_LOAN_APPL") == 0)
         {
             printf("Processing VIEW_LOAN_APPL request\n");
-
-            // Call the function to fetch assigned loans
             char loan_details[BUFFER_SIZE];
             int result = view_employee_loans(id, loan_details);
 
-            // Send loan details or an error message back to the client
-            if (result == 0) {
+            if (result == 0) 
+            {
                 write(sock, loan_details, strlen(loan_details));
-            } else {
+            } 
+            else 
+            {
                 strcpy(buffer, "Failed to retrieve loan applications.\n");
                 write(sock, buffer, strlen(buffer));
             }
         }
         else if (strcmp(buffer, "APP/REJ_LOANS") == 0)
         {
-             printf("Processing APP/REJ_LOANS request\n");
-
-            // Receive loan ID from client
+            printf("Processing APP/REJ_LOANS request\n");
             bytes_read = read(sock, buffer, BUFFER_SIZE);
             buffer[bytes_read] = '\0';
             int loan_id = atoi(buffer);
 
-            // Receive new status from client ("Approved" or "Rejected")
             bytes_read = read(sock, buffer, BUFFER_SIZE);
             buffer[bytes_read] = '\0';
             char new_status[20];
             strcpy(new_status, buffer);
 
-            // Update loan status
             float loan_amount = update_loan_status(loan_id, new_status);
-            if (loan_amount == -1) {
+            if (loan_amount == -1) 
+            {
                 strcpy(buffer, "Failed to update loan status.\n");
-            } else if (strcmp(new_status, "Approved") == 0) {
-                // Credit loan amount to the customer if approved
-                if (credit_to_customer(loan_id, loan_amount) == 0) {
+            } 
+            else if (strcmp(new_status, "Approved") == 0) 
+            {
+                if (credit_to_customer(loan_id, loan_amount) == 0) 
+                {
                     strcpy(buffer, "Loan approved and amount credited to customer.\n");
-                } else {
+                } 
+                else 
+                {
                     strcpy(buffer, "Loan approved, but failed to credit amount.\n");
                 }
             } else {
                 strcpy(buffer, "Loan status updated successfully.\n");
             }
-
-            // Send response back to client
             write(sock, buffer, strlen(buffer));
         }
         else if (strcmp(buffer, "VIEW_CUST_TRANS") == 0)
@@ -1272,12 +1264,14 @@ void handle_employee_requests(int sock, const char *user_id)
             printf("Processing VIEW_CUST_TRANS request\n");
             view_customer_transactions(sock);
         }
-        else if (strcmp(buffer, "CHANGE_PWD") == 0) {
+        else if (strcmp(buffer, "CHANGE_PWD") == 0) 
+        {
             char new_pwd[50];
             read(sock, new_pwd, sizeof(new_pwd));
             new_pwd[sizeof(new_pwd) - 1] = '\0';
             size_t len = strlen(new_pwd);
-            if (len > 0 && new_pwd[len - 1] == '\n') {
+            if (len > 0 && new_pwd[len - 1] == '\n') 
+            {
                 new_pwd[len - 1] = '\0';
             }
             int status = change_emp_password(id, new_pwd);
@@ -1300,55 +1294,64 @@ void handle_employee_requests(int sock, const char *user_id)
 
 /////////////////////////Manager/////////////////////////
 
-int update_customer_status(int custID, const char *action) {
+int update_customer_status(int custID, const char *action) 
+{
     FILE *file = fopen("./data/customer.data", "rb+");
-    if (!file) {
+    if (!file) 
+    {
         perror("Error opening customer data");
         return 0;
     }
 
     struct customer cust;
-    while (fread(&cust, sizeof(struct customer), 1, file)) {
-        if (cust.userID == custID) {
-            // Update status based on the action
-            if (strcmp(action, "ACTIVATE") == 0) {
+    while (fread(&cust, sizeof(struct customer), 1, file)) 
+    {
+        if (cust.userID == custID) 
+        {
+            if (strcmp(action, "ACTIVATE") == 0) 
+            {
                 strcpy(cust.status, "Active");
-            } else {
+            } 
+            else 
+            {
                 strcpy(cust.status, "Inactive");
             }
 
-            fseek(file, -sizeof(struct customer), SEEK_CUR);  // Move file pointer back
-            fwrite(&cust, sizeof(struct customer), 1, file);  // Update record
+            fseek(file, -sizeof(struct customer), SEEK_CUR); 
+            fwrite(&cust, sizeof(struct customer), 1, file);
             fclose(file);
-            return 1;  // Success
+            return 1; 
         }
     }
     fclose(file);
-    return 0;  // Customer not found
+    return 0;
 }
 
-int assign_loan_to_employee(int empID, int loanID) {
+int assign_loan_to_employee(int empID, int loanID) 
+{
     FILE *file = fopen("./data/employee.data", "rb+");
-    if (!file) {
+    if (!file) 
+    {
         perror("Error opening employee data");
         return 0;
     }
 
     struct employee emp;
-    while (fread(&emp, sizeof(struct employee), 1, file)) {
-        // Find matching employee and ensure there's room for more loans
-        if (emp.employeeID == empID && emp.loan_count < 10) {
-            emp.assigned_loans[emp.loan_count++] = loanID;  // Add loan ID
+    while (fread(&emp, sizeof(struct employee), 1, file)) 
+    {
+        if (emp.employeeID == empID && emp.loan_count < 10) 
+        {
+            emp.assigned_loans[emp.loan_count++] = loanID;
 
-            fseek(file, -sizeof(struct employee), SEEK_CUR);  // Update employee record
-            fwrite(&emp, sizeof(struct employee), 1, file);   // Write updated data
+            fseek(file, -sizeof(struct employee), SEEK_CUR);
+            fwrite(&emp, sizeof(struct employee), 1, file);  
             fclose(file);
-            return 1;  // Successfully assigned loan
+            return 1; 
         }
     }
 
-    fclose(file);  // Close file if employee not found or no space for new loans
-    return 0;  // Failed to assign loan
+    fclose(file);  
+    return 0;  
 }
 
 int change_mng_password(int uid, const char *new_password)
@@ -1361,10 +1364,10 @@ int change_mng_password(int uid, const char *new_password)
     }
 
     struct flock lock;
-    lock.l_type = F_WRLCK; // Write lock
+    lock.l_type = F_WRLCK;
     lock.l_whence = SEEK_SET;
     lock.l_start = 0;
-    lock.l_len = 0; // Lock the whole file
+    lock.l_len = 0; 
 
     if (fcntl(fd, F_SETLK, &lock) == -1)
     {
@@ -1377,7 +1380,6 @@ int change_mng_password(int uid, const char *new_password)
     int found = 0;
     off_t position;
 
-    // Read and modify the password
     while (read(fd, &c, sizeof(struct manager)) == sizeof(struct manager))
     {
         if (c.managerID == uid)
@@ -1394,7 +1396,7 @@ int change_mng_password(int uid, const char *new_password)
             if (write(fd, &c, sizeof(struct manager)) != sizeof(struct manager))
             {
                 perror("Failed to write updated record");
-                flock(fd, LOCK_UN); // Unlock the file before returning
+                flock(fd, LOCK_UN);
                 close(fd);
                 return -1;
             }
@@ -1403,7 +1405,7 @@ int change_mng_password(int uid, const char *new_password)
         }
     }
 
-    lock.l_type = F_UNLCK; // Unlock
+    lock.l_type = F_UNLCK;
     fcntl(fd, F_SETLK, &lock);
     close(fd);
     if (!found)
@@ -1440,10 +1442,12 @@ void handle_manager_requests(int sock, const char *user_id)
             action[bytes_read] = '\0';
             action[strcspn(action, "\n")] = '\0';
 
-            // Update customer status
-            if (update_customer_status(custid, action)) {
+            if (update_customer_status(custid, action)) 
+            {
                 sprintf(buffer, "Customer %d %s successfully.\n", custid, action);
-            } else {
+            } 
+            else 
+            {
                 sprintf(buffer, "Failed to %s customer %d.\n", action, custid);
             }
             write(sock, buffer, strlen(buffer));
@@ -1452,14 +1456,13 @@ void handle_manager_requests(int sock, const char *user_id)
         {
             int loanID, empID;
 
-            // Read Loan ID
             bytes_read = read(sock, buffer, sizeof(buffer) - 1);
             buffer[bytes_read] = '\0';
             sscanf(buffer, "%d", &loanID);
 
-            // Read Employee ID
             bytes_read = read(sock, buffer, sizeof(buffer) - 1);
-            if (bytes_read <= 0) {
+            if (bytes_read <= 0) 
+            {
                 perror("Error reading Employee ID");
                 close(sock);
                 return;
@@ -1467,17 +1470,21 @@ void handle_manager_requests(int sock, const char *user_id)
             buffer[bytes_read] = '\0';
             empID = atoi(buffer);
 
-            // Assign loan to employee
-            if (assign_loan_to_employee(empID, loanID)) {
+            if (assign_loan_to_employee(empID, loanID))
+            {
                 sprintf(buffer, "Loan %d assigned to Employee %d successfully.\n", loanID, empID);
-            } else {
+            } 
+            else 
+            {
                 sprintf(buffer, "Failed to assign loan %d to Employee %d.\n", loanID, empID);
             }
             write(sock, buffer, strlen(buffer));
         }
-        else if (strcmp(buffer, "VIEW_FEEDBACK") == 0) {
+        else if (strcmp(buffer, "VIEW_FEEDBACK") == 0) 
+        {
             FILE *file = fopen("./data/feedback.data", "rb");
-            if (!file) {
+            if (!file) 
+            {
                 perror("Error opening feedback file");
                 strcpy(buffer, "No feedback available.\n");
                 write(sock, buffer, strlen(buffer));
@@ -1485,49 +1492,50 @@ void handle_manager_requests(int sock, const char *user_id)
             }
 
             struct feedback fb;
-            char feedbacks[BUFFER_SIZE * 10] = "";  // Buffer to accumulate feedback for display
+            char feedbacks[BUFFER_SIZE * 10] = ""; 
             int count = 0;
 
-            // Read and accumulate feedback entries
-            while (fread(&fb, sizeof(struct feedback), 1, file)) {
+            while (fread(&fb, sizeof(struct feedback), 1, file)) 
+            {
                 char temp[BUFFER_SIZE];
-                snprintf(temp, sizeof(temp), 
-                        "Feedback ID: %d\nCustomer ID: %d\nMessage: %s\nStatus: %s\n\n", 
-                        fb.feedbackID, fb.customerID, fb.message, fb.status);
+                snprintf(temp, sizeof(temp), "Feedback ID: %d\nCustomer ID: %d\nMessage: %s\nStatus: %s\n\n", fb.feedbackID, fb.customerID, fb.message, fb.status);
                 strcat(feedbacks, temp);
                 count++;
             }
             fclose(file);
 
-            if (count == 0) {
+            if (count == 0) 
+            {
                 strcpy(feedbacks, "No feedback available.\n");
             }
 
-            write(sock, feedbacks, strlen(feedbacks));  // Send all feedbacks to the client
+            write(sock, feedbacks, strlen(feedbacks)); 
 
-            // Receive manager's input for feedback ID to mark as reviewed
             int feedback_id;
             int bytes_read = read(sock, buffer, BUFFER_SIZE);
-            if (bytes_read <= 0) {
+            if (bytes_read <= 0) 
+            {
                 perror("Error reading feedback ID");
                 return;
             }
             buffer[bytes_read] = '\0';
             sscanf(buffer, "%d", &feedback_id);
 
-            // Open file again for updating the selected feedback status
-            FILE *temp_file = fopen("temp_feedback.data", "wb");
-            file = fopen("feedback.data", "rb");
+            FILE *temp_file = fopen("./data/temp_feedback.data", "wb");
+            file = fopen("./data/feedback.data", "rb");
 
-            if (!temp_file || !file) {
+            if (!temp_file || !file) 
+            {
                 perror("Error processing feedback update");
                 return;
             }
 
             int updated = 0;
-            while (fread(&fb, sizeof(struct feedback), 1, file)) {
-                if (fb.feedbackID == feedback_id) {
-                    strcpy(fb.status, "Reviewed");  // Update the status to "Reviewed"
+            while (fread(&fb, sizeof(struct feedback), 1, file)) 
+            {
+                if (fb.feedbackID == feedback_id) 
+                {
+                    strcpy(fb.status, "Reviewed"); 
                     updated = 1;
                 }
                 fwrite(&fb, sizeof(struct feedback), 1, temp_file);
@@ -1535,18 +1543,21 @@ void handle_manager_requests(int sock, const char *user_id)
             fclose(file);
             fclose(temp_file);
 
-            // Replace old file with updated one
-            remove("feedback.data");
-            rename("temp_feedback.data", "feedback.data");
+            remove("./data/feedback.data");
+            rename("./data/temp_feedback.data", "./data/feedback.data");
 
-            if (updated) {
+            if (updated) 
+            {
                 strcpy(buffer, "Feedback status updated to 'Reviewed'.\n");
-            } else {
+            } 
+            else 
+            {
                 strcpy(buffer, "Invalid Feedback ID.\n");
             }
             write(sock, buffer, strlen(buffer));
         }
-        else if (strcmp(buffer, "CHANGE_PWD") == 0) {
+        else if (strcmp(buffer, "CHANGE_PWD") == 0) 
+        {
             char new_pwd[50];
             read(sock, new_pwd, sizeof(new_pwd));
             new_pwd[sizeof(new_pwd) - 1] = '\0';
@@ -1571,27 +1582,28 @@ void handle_manager_requests(int sock, const char *user_id)
 /////////////////////////Manager/////////////////////////
 
 /////////////////////////Admin/////////////////////////
-int add_employee(int uid, const char *fname, const char *lname, const char *pwd) {
+int add_employee(int uid, const char *fname, const char *lname, const char *pwd) 
+{
     int fd = open("./data/employee.data", O_WRONLY | O_APPEND | O_CREAT, 0644);
-    if (fd < 0) {
+    if (fd < 0) 
+    {
         perror("Failed to open the employee file");
         return -1;
     }
 
-    // Apply an exclusive lock to avoid race conditions
     struct flock lock;
     lock.l_type = F_WRLCK;
     lock.l_whence = SEEK_END;
     lock.l_start = 0;
-    lock.l_len = 0;  // Lock the entire file
+    lock.l_len = 0;  
 
-    if (fcntl(fd, F_SETLKW, &lock) == -1) {
+    if (fcntl(fd, F_SETLKW, &lock) == -1) 
+    {
         perror("Failed to lock the file");
         close(fd);
         return -1;
     }
 
-    // Create a new customer struct and fill it with provided data
     struct employee new_employee;
     new_employee.employeeID = uid;
     strncpy(new_employee.first_name, fname, sizeof(new_employee.first_name) - 1);
@@ -1606,28 +1618,26 @@ int add_employee(int uid, const char *fname, const char *lname, const char *pwd)
     strncpy(new_employee.status, "Active", sizeof(new_employee.status) - 1);
     new_employee.status[sizeof(new_employee.status) - 1] = '\0';
 
-    // Write the new customer data to the file
-    if (write(fd, &new_employee, sizeof(struct employee)) != sizeof(struct employee)) {
+    if (write(fd, &new_employee, sizeof(struct employee)) != sizeof(struct employee)) 
+    {
         perror("Failed to write new employee to the file");
-        fcntl(fd, F_UNLCK, &lock);  // Unlock the file before returning
+        fcntl(fd, F_UNLCK, &lock); 
         close(fd);
         return -1;
     }
 
-    // Unlock the file and close the descriptor
     lock.l_type = F_UNLCK;
     fcntl(fd, F_SETLK, &lock);
     close(fd);
 
     printf("New customer (ID: %d) added successfully.\n", uid);
-    return 0;  // Success
+    return 0; 
 }
 
 void delete_employee(int employeeID, int sock) {
     char buffer[BUFFER_SIZE];
     int found = 0;
 
-    // Open the employee data file
     FILE *fp = fopen("./data/employee.data", "rb");
     FILE *temp = fopen("./data/temp_employee.data", "wb");
 
@@ -1641,11 +1651,14 @@ void delete_employee(int employeeID, int sock) {
 
     struct employee emp;
 
-    // Read through the file and copy all except the matching Employee ID
-    while (fread(&emp, sizeof(struct employee), 1, fp)) {
-        if (emp.employeeID == employeeID) {
-            found = 1; // Mark as found and skip writing to the new file
-        } else {
+    while (fread(&emp, sizeof(struct employee), 1, fp)) 
+    {
+        if (emp.employeeID == employeeID) 
+        {
+            found = 1; 
+        } 
+        else 
+        {
             fwrite(&emp, sizeof(struct employee), 1, temp);
         }
     }
@@ -1653,57 +1666,23 @@ void delete_employee(int employeeID, int sock) {
     fclose(fp);
     fclose(temp);
 
-    // Replace original file with the updated file
-    if (found) {
-        remove("employee.data");
-        rename("temp_employee.data", "employee.data");
+    if (found) 
+    {
+        remove("./data/employee.data");
+        rename("./data/temp_employee.data", "./data/employee.data");
         strcpy(buffer, "Employee deleted successfully.\n");
-    } else {
-        remove("temp_employee.data");
+    } 
+    else 
+    {
+        remove("./data/temp_employee.data");
         strcpy(buffer, "Employee not found.\n");
     }
 
-    // Send the response back to the client
     write(sock, buffer, strlen(buffer));
 }
 
-void manage_user_roles(int sock) {
-    char buffer[BUFFER_SIZE];
-    int id, found = 0;
-    char new_role[20];
-
-    // Step 1: Receive the user ID (either Employee or Manager ID) from the client
-    int bytes_read = read(sock, buffer, sizeof(buffer) - 1);
-    if (bytes_read <= 0) {
-        perror("Error reading ID");
-        close(sock);
-        return;
-    }
-    buffer[bytes_read] = '\0';
-    sscanf(buffer, "%d", &id);  // Convert to integer
-
-    // Step 2: Receive the new role ("Manager" or "Employee") from the client
-    bytes_read = read(sock, new_role, sizeof(new_role) - 1);
-    if (bytes_read <= 0) {
-        perror("Error reading new role");
-        close(sock);
-        return;
-    }
-    new_role[bytes_read] = '\0';
-
-    // Handle role change
-    if (strcmp(new_role, "Manager") == 0) {
-        promote_to_manager(id, sock);
-    } else if (strcmp(new_role, "Employee") == 0) {
-        demote_to_employee(id, sock);
-    } else {
-        strcpy(buffer, "Invalid role specified.\n");
-        write(sock, buffer, strlen(buffer));
-    }
-}
-
-// Promote Employee to Manager
-void promote_to_manager(int employeeID, int sock) {
+void promote_to_manager(int employeeID, int sock) 
+{
     FILE *emp_fp = fopen("./data/employee.data", "rb");
     FILE *mgr_fp = fopen("./data/manager.data", "ab");
     struct employee emp;
@@ -1711,31 +1690,33 @@ void promote_to_manager(int employeeID, int sock) {
     char buffer[BUFFER_SIZE];
     int found = 0;
 
-    if (!emp_fp || !mgr_fp) {
+    if (!emp_fp || !mgr_fp) 
+    {
         perror("Error opening files");
         strcpy(buffer, "Error accessing data.\n");
         write(sock, buffer, strlen(buffer));
         return;
     }
 
-    // Search for the employee by ID
-    FILE *temp_fp = fopen("temp_employee.data", "wb");
-    while (fread(&emp, sizeof(struct employee), 1, emp_fp)) {
-        if (emp.employeeID == employeeID) {
+    FILE *temp_fp = fopen("./data/temp_employee.data", "wb");
+    while (fread(&emp, sizeof(struct employee), 1, emp_fp)) 
+    {
+        if (emp.employeeID == employeeID) 
+        {
             found = 1;
-            // Transfer details to manager struct
             mgr.managerID = emp.employeeID;
             strncpy(mgr.first_name, emp.first_name, sizeof(mgr.first_name) - 1);
-            mgr.first_name[sizeof(mgr.first_name) - 1] = '\0';  // Null-terminate
+            mgr.first_name[sizeof(mgr.first_name) - 1] = '\0';
             strncpy(mgr.last_name, emp.last_name, sizeof(mgr.last_name) - 1);
             mgr.last_name[sizeof(mgr.last_name) - 1] = '\0';
             strncpy(mgr.password, emp.password, sizeof(mgr.password) - 1);
             mgr.password[sizeof(mgr.password) - 1] = '\0';
 
-            // Write the new manager record
             fwrite(&mgr, sizeof(struct manager), 1, mgr_fp);
-        } else {
-            fwrite(&emp, sizeof(struct employee), 1, temp_fp);  // Keep other employees
+        } 
+        else 
+        {
+            fwrite(&emp, sizeof(struct employee), 1, temp_fp); 
         }
     }
 
@@ -1743,20 +1724,22 @@ void promote_to_manager(int employeeID, int sock) {
     fclose(mgr_fp);
     fclose(temp_fp);
 
-    // Replace the old employee data with the updated one
-    remove("employee.data");
-    rename("temp_employee.data", "employee.data");
+    remove("./data/employee.data");
+    rename("./data/temp_employee.data", "./data/employee.data");
 
-    if (found) {
+    if (found) 
+    {
         strcpy(buffer, "Employee promoted to Manager successfully.\n");
-    } else {
+    } 
+    else 
+    {
         strcpy(buffer, "Employee not found.\n");
     }
     write(sock, buffer, strlen(buffer));
 }
 
-// Demote Manager to Employee
-void demote_to_employee(int managerID, int sock) {
+void demote_to_employee(int managerID, int sock) 
+{
     FILE *mgr_fp = fopen("./data/manager.data", "rb");
     FILE *emp_fp = fopen("./data/employee.data", "ab");
     struct manager mgr;
@@ -1764,19 +1747,20 @@ void demote_to_employee(int managerID, int sock) {
     char buffer[BUFFER_SIZE];
     int found = 0;
 
-    if (!mgr_fp || !emp_fp) {
+    if (!mgr_fp || !emp_fp) 
+    {
         perror("Error opening files");
         strcpy(buffer, "Error accessing data.\n");
         write(sock, buffer, strlen(buffer));
         return;
     }
 
-    // Search for the manager by ID
-    FILE *temp_fp = fopen("temp_manager.data", "wb");
-    while (fread(&mgr, sizeof(struct manager), 1, mgr_fp)) {
-        if (mgr.managerID == managerID) {
+    FILE *temp_fp = fopen("./data/temp_manager.data", "wb");
+    while (fread(&mgr, sizeof(struct manager), 1, mgr_fp)) 
+    {
+        if (mgr.managerID == managerID) 
+        {
             found = 1;
-            // Transfer details to employee struct
             emp.employeeID = mgr.managerID;
             strncpy(emp.first_name, mgr.first_name, sizeof(emp.first_name) - 1);
             emp.first_name[sizeof(emp.first_name) - 1] = '\0';
@@ -1785,14 +1769,15 @@ void demote_to_employee(int managerID, int sock) {
             strncpy(emp.password, mgr.password, sizeof(emp.password) - 1);
             emp.password[sizeof(emp.password) - 1] = '\0';
             strcpy(emp.status, "Active");
-            emp.loan_count = 0;  // No loans assigned initially
+            emp.loan_count = 0; 
             memset(emp.assigned_loans, 0, sizeof(emp.assigned_loans));
             emp.assigned_loans[sizeof(emp.assigned_loans) - 1] = '\0';
 
-            // Write the new employee record
             fwrite(&emp, sizeof(struct employee), 1, emp_fp);
-        } else {
-            fwrite(&mgr, sizeof(struct manager), 1, temp_fp);  // Keep other managers
+        } 
+        else 
+        {
+            fwrite(&mgr, sizeof(struct manager), 1, temp_fp); 
         }
     }
 
@@ -1800,17 +1785,60 @@ void demote_to_employee(int managerID, int sock) {
     fclose(emp_fp);
     fclose(temp_fp);
 
-    // Replace the old manager data with the updated one
-    remove("manager.data");
-    rename("temp_manager.data", "manager.data");
+    remove("./data/manager.data");
+    rename("./data/temp_manager.data", "./data/manager.data");
 
-    if (found) {
+    if (found) 
+    {
         strcpy(buffer, "Manager demoted to Employee successfully.\n");
-    } else {
+    } 
+    else 
+    {
         strcpy(buffer, "Manager not found.\n");
     }
     write(sock, buffer, strlen(buffer));
 }
+
+void manage_user_roles(int sock) 
+{
+    char buffer[BUFFER_SIZE];
+    int id, found = 0;
+    char new_role[20];
+
+    int bytes_read = read(sock, buffer, sizeof(buffer) - 1);
+    if (bytes_read <= 0) 
+    {
+        perror("Error reading ID");
+        close(sock);
+        return;
+    }
+    buffer[bytes_read] = '\0';
+    sscanf(buffer, "%d", &id); 
+
+    bytes_read = read(sock, new_role, sizeof(new_role) - 1);
+    if (bytes_read <= 0) 
+    {
+        perror("Error reading new role");
+        close(sock);
+        return;
+    }
+    new_role[bytes_read] = '\0';
+
+    if (strcmp(new_role, "Manager") == 0) 
+    {
+        promote_to_manager(id, sock);
+    } 
+    else if (strcmp(new_role, "Employee") == 0) 
+    {
+        demote_to_employee(id, sock);
+    } 
+    else 
+    {
+        strcpy(buffer, "Invalid role specified.\n");
+        write(sock, buffer, strlen(buffer));
+    }
+}
+
 
 int change_admin_password(int uid, const char *new_password)
 {
@@ -1822,10 +1850,10 @@ int change_admin_password(int uid, const char *new_password)
     }
 
     struct flock lock;
-    lock.l_type = F_WRLCK; // Write lock
+    lock.l_type = F_WRLCK; 
     lock.l_whence = SEEK_SET;
     lock.l_start = 0;
-    lock.l_len = 0; // Lock the whole file
+    lock.l_len = 0; 
 
     if (fcntl(fd, F_SETLK, &lock) == -1)
     {
@@ -1838,7 +1866,6 @@ int change_admin_password(int uid, const char *new_password)
     int found = 0;
     off_t position;
 
-    // Read and modify the password
     while (read(fd, &c, sizeof(struct manager)) == sizeof(struct manager))
     {
         if (c.managerID == uid)
@@ -1855,7 +1882,7 @@ int change_admin_password(int uid, const char *new_password)
             if (write(fd, &c, sizeof(struct manager)) != sizeof(struct manager))
             {
                 perror("Failed to write updated record");
-                flock(fd, LOCK_UN); // Unlock the file before returning
+                flock(fd, LOCK_UN); 
                 close(fd);
                 return -1;
             }
@@ -1864,7 +1891,7 @@ int change_admin_password(int uid, const char *new_password)
         }
     }
 
-    lock.l_type = F_UNLCK; // Unlock
+    lock.l_type = F_UNLCK; 
     fcntl(fd, F_SETLK, &lock);
     close(fd);
     if (!found)
@@ -1892,7 +1919,8 @@ void handle_admin_requests(int sock, const char *user_id)
             int eid;
             char fname[30], lname[30], pwd[50];
 
-            if (read(sock, buffer, sizeof(buffer) - 1) <= 0) {
+            if (read(sock, buffer, sizeof(buffer) - 1) <= 0) 
+            {
                 perror("Error reading User ID from client");
                 close(sock);
                 return;
@@ -1919,13 +1947,13 @@ void handle_admin_requests(int sock, const char *user_id)
             }
             write(sock, buffer, strlen(buffer));
         }
-        else if (strcmp(buffer, "MANAGE_CUSTOMER") == 0) {
+        else if (strcmp(buffer, "MANAGE_CUSTOMER") == 0) 
+        {
             int uid;
             char new_fname[50], new_lname[50],new_status[20], new_password[50], buffer[BUFFER_SIZE];
             float new_balance, new_loan;
             int option, bytes_read;
 
-            // Receive the customer ID from the client
             bytes_read = read(sock, buffer, sizeof(buffer) - 1);
             buffer[bytes_read] = '\0';
             sscanf(buffer, "%d", &uid);
@@ -1943,9 +1971,10 @@ void handle_admin_requests(int sock, const char *user_id)
             lock.l_type = F_WRLCK;
             lock.l_whence = SEEK_SET;
             lock.l_start = 0;
-            lock.l_len = 0; // Lock the entire file
+            lock.l_len = 0; 
 
-            if (fcntl(fd, F_SETLK, &lock) == -1) {
+            if (fcntl(fd, F_SETLK, &lock) == -1) 
+            {
                 perror("Error locking customer file");
                 strcpy(buffer, "Error: Unable to lock the file.\n");
                 write(sock, buffer, strlen(buffer));
@@ -1956,16 +1985,18 @@ void handle_admin_requests(int sock, const char *user_id)
             int found = 0;
             off_t position;
 
-            // Search for the customer by ID
-            while (read(fd, &c, sizeof(struct customer)) == sizeof(struct customer)) {
-                if (c.userID == uid) {
+            while (read(fd, &c, sizeof(struct customer)) == sizeof(struct customer)) 
+            {
+                if (c.userID == uid) 
+                {
                     found = 1;
                     position = lseek(fd, -sizeof(struct customer), SEEK_CUR);
                     break;
                 }
             }
 
-            if (!found) {
+            if (!found) 
+            {
                 snprintf(buffer, sizeof(buffer), "Customer with ID %d not found.\n", uid);
                 write(sock, buffer, strlen(buffer));
                 flock(fd, F_UNLCK);
@@ -1973,100 +2004,99 @@ void handle_admin_requests(int sock, const char *user_id)
                 return;
             }
 
-            // Send the customer details to the client
             snprintf(buffer, sizeof(buffer), "ID: %d\nName: %s %s\nBalance: %.2f\nLoan: %.2f\nStatus: %s\n", c.userID, c.firstName, c.lastName, c.balance, c.loan, c.status);
             write(sock, buffer, strlen(buffer));
 
-            // Receive the option from the client (1: Modify, 2: Delete, 3: Reset Password, 4: Exit)
             bytes_read = read(sock, buffer, sizeof(buffer) - 1);
             buffer[bytes_read] = '\0';
             option = atoi(buffer);
 
-            switch (option) {
-                case 1: // Modify Customer
+            switch (option) 
+            {
+                case 1: 
 
                     read(sock, new_fname, sizeof(new_fname));
                     new_fname[sizeof(new_fname) - 1] = '\0';
                     size_t len = strlen(new_fname);
-                    if (len > 0 && new_fname[len - 1] == '\n') {
+                    if (len > 0 && new_fname[len - 1] == '\n') 
+                    {
                         new_fname[len - 1] = '\0';
                     }
 
                     read(sock, new_lname, sizeof(new_lname));
                     new_lname[sizeof(new_lname) - 1] = '\0';
-                    size_t len = strlen(new_lname);
-                    if (len > 0 && new_lname[len - 1] == '\n') {
+                    len = strlen(new_lname);
+                    if (len > 0 && new_lname[len - 1] == '\n') 
+                    {
                         new_lname[len - 1] = '\0';
                     }
 
-                    // Receive new balance
                     bytes_read = read(sock, buffer, sizeof(buffer) - 1);
                     buffer[bytes_read] = '\0';
                     sscanf(buffer, "%f", &new_balance);
 
-                    // Receive new loan amount
                     bytes_read = read(sock, buffer, sizeof(buffer) - 1);
                     buffer[bytes_read] = '\0';
                     sscanf(buffer, "%f", &new_loan);
 
-                    // Receive new status
                     read(sock, new_status, sizeof(new_status));
                     new_status[sizeof(new_status) - 1] = '\0';
-                    size_t len = strlen(new_status);
-                    if (len > 0 && new_status[len - 1] == '\n') {
+                    len = strlen(new_status);
+                    if (len > 0 && new_status[len - 1] == '\n') 
+                    {
                         new_status[len - 1] = '\0';
                     }
 
-                    // Update the customer struct
                     strncpy(c.firstName, new_fname, sizeof(c.firstName) - 1);
                     strncpy(c.lastName, new_lname, sizeof(c.lastName) - 1);
                     c.balance = new_balance;
                     c.loan = new_loan;
                     strncpy(c.status, new_status, sizeof(c.status) - 1);
 
-                    // Write the modified customer back to the file
                     lseek(fd, position, SEEK_SET);
-                    if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer)) {
+                    if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer)) 
+                    {
                         perror("Failed to write updated customer record");
                         strcpy(buffer, "Error: Failed to update customer.\n");
                         write(sock, buffer, strlen(buffer));
-                    } else {
+                    } 
+                    else 
+                    {
                         strcpy(buffer, "Customer details updated successfully.\n");
                         write(sock, buffer, strlen(buffer));
                     }
                     break;
 
-                case 2: // Delete Customer
+                case 2:
                     delete_customer(uid, sock);
                     break;
 
-                case 3: // Reset Password
-                    // Receive the new password
+                case 3:
                     bytes_read = read(sock, new_password, sizeof(new_password) - 1);
                     new_password[bytes_read] = '\0';
-                    new_password[strcspn(new_password, "\n")] = '\0'; 
-                    new_password[sizeof(new_password) - 1] = '\0';
                     len = strlen(new_password);
-                    if (len > 0 && new_password[len - 1] == '\n') {
+                    if (len > 0 && new_password[len - 1] == '\n') 
+                    {
                         new_password[len - 1] = '\0';
                     }
 
-                    // Update the password in the customer struct
                     strncpy(c.password, new_password, sizeof(c.password) - 1);
 
-                    // Write the updated password to the file
                     lseek(fd, position, SEEK_SET);
-                    if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer)) {
+                    if (write(fd, &c, sizeof(struct customer)) != sizeof(struct customer)) 
+                    {
                         perror("Failed to reset password");
                         strcpy(buffer, "Error: Failed to reset password.\n");
                         write(sock, buffer, strlen(buffer));
-                    } else {
+                    } 
+                    else 
+                    {
                         strcpy(buffer, "Password reset successfully.\n");
                         write(sock, buffer, strlen(buffer));
                     }
                     break;
 
-                case 4: // Exit
+                case 4:
                     strcpy(buffer, "Exiting customer management.\n");
                     write(sock, buffer, strlen(buffer));
                     break;
@@ -2076,24 +2106,23 @@ void handle_admin_requests(int sock, const char *user_id)
                     write(sock, buffer, strlen(buffer));
                     break;
             }
-
-            // Unlock and close the file
             flock(fd, F_UNLCK);
             close(fd);
         }
-        else if (strcmp(buffer, "MANAGE_EMPLOYEE") == 0) {
+        else if (strcmp(buffer, "MANAGE_EMPLOYEE") == 0) 
+        {
             int uid;
             char new_fname[50], new_lname[50], new_status[20], new_password[50], buffer[BUFFER_SIZE];
             int option, bytes_read;
 
-            // Receive the customer ID from the client
             bytes_read = read(sock, buffer, sizeof(buffer) - 1);
             buffer[bytes_read] = '\0';
             sscanf(buffer, "%d", &uid);
 
             struct employee c;
             int fd = open("./data/employee.data", O_RDWR);
-            if (fd == -1) {
+            if (fd == -1) 
+            {
                 perror("Error opening employee file");
                 strcpy(buffer, "Error: Unable to open employee file.\n");
                 write(sock, buffer, strlen(buffer));
@@ -2104,9 +2133,10 @@ void handle_admin_requests(int sock, const char *user_id)
             lock.l_type = F_WRLCK;
             lock.l_whence = SEEK_SET;
             lock.l_start = 0;
-            lock.l_len = 0; // Lock the entire file
+            lock.l_len = 0;
 
-            if (fcntl(fd, F_SETLK, &lock) == -1) {
+            if (fcntl(fd, F_SETLK, &lock) == -1) 
+            {
                 perror("Error locking employee file");
                 strcpy(buffer, "Error: Unable to lock the file.\n");
                 write(sock, buffer, strlen(buffer));
@@ -2117,16 +2147,18 @@ void handle_admin_requests(int sock, const char *user_id)
             int found = 0;
             off_t position;
 
-            // Search for the customer by ID
-            while (read(fd, &c, sizeof(struct employee)) == sizeof(struct employee)) {
-                if (c.employeeID == uid) {
+            while (read(fd, &c, sizeof(struct employee)) == sizeof(struct employee)) 
+            {
+                if (c.employeeID == uid) 
+                {
                     found = 1;
                     position = lseek(fd, -sizeof(struct employee), SEEK_CUR);
                     break;
                 }
             }
 
-            if (!found) {
+            if (!found) 
+            {
                 snprintf(buffer, sizeof(buffer), "Employee with ID %d not found.\n", uid);
                 write(sock, buffer, strlen(buffer));
                 flock(fd, F_UNLCK);
@@ -2134,50 +2166,53 @@ void handle_admin_requests(int sock, const char *user_id)
                 return;
             }
 
-            // Send the customer details to the client
             snprintf(buffer, sizeof(buffer), "EMP ID: %d\nName: %s %s\nStatus: %s\n", c.employeeID, c.first_name, c.last_name, c.status);
             write(sock, buffer, strlen(buffer));
 
-            // Receive the option from the client (1: Modify, 2: Delete, 3: Reset Password, 4: Exit)
             bytes_read = read(sock, buffer, sizeof(buffer) - 1);
             buffer[bytes_read] = '\0';
             option = atoi(buffer);
 
-            switch (option) {
-                case 1: // Modify Customer
+            switch (option) 
+            {
+                case 1:
                     read(sock, new_fname, sizeof(new_fname));
                     new_fname[sizeof(new_fname) - 1] = '\0';
                     size_t len = strlen(new_fname);
-                    if (len > 0 && new_fname[len - 1] == '\n') {
+                    if (len > 0 && new_fname[len - 1] == '\n') 
+                    {
                         new_fname[len - 1] = '\0';
                     }
 
                     read(sock, new_lname, sizeof(new_lname));
                     new_lname[sizeof(new_lname) - 1] = '\0';
-                    size_t len = strlen(new_lname);
-                    if (len > 0 && new_lname[len - 1] == '\n') {
+                    len = strlen(new_lname);
+                    if (len > 0 && new_lname[len - 1] == '\n') 
+                    {
                         new_lname[len - 1] = '\0';
                     }
 
                     read(sock, new_status, sizeof(new_status));
                     new_status[sizeof(new_status) - 1] = '\0';
-                    size_t len = strlen(new_status);
-                    if (len > 0 && new_status[len - 1] == '\n') {
+                    len = strlen(new_status);
+                    if (len > 0 && new_status[len - 1] == '\n') 
+                    {
                         new_status[len - 1] = '\0';
                     }
 
-                    // Update the customer struct
                     strncpy(c.first_name, new_fname, sizeof(c.first_name) - 1);
                     strncpy(c.last_name, new_lname, sizeof(c.last_name) - 1);
                     strncpy(c.status, new_status, sizeof(c.status) - 1);
 
-                    // Write the modified customer back to the file
                     lseek(fd, position, SEEK_SET);
-                    if (write(fd, &c, sizeof(struct employee)) != sizeof(struct employee)) {
+                    if (write(fd, &c, sizeof(struct employee)) != sizeof(struct employee)) 
+                    {
                         perror("Failed to write updated employee record");
                         strcpy(buffer, "Error: Failed to update employee.\n");
                         write(sock, buffer, strlen(buffer));
-                    } else {
+                    } 
+                    else 
+                    {
                         strcpy(buffer, "Employee details updated successfully.\n");
                         write(sock, buffer, strlen(buffer));
                     }
@@ -2187,33 +2222,34 @@ void handle_admin_requests(int sock, const char *user_id)
                     delete_employee(uid, sock);
                     break;
 
-                case 3: // Reset Password
-                    // Receive the new password
+                case 3:
                     bytes_read = read(sock, new_password, sizeof(new_password) - 1);
                     new_password[bytes_read] = '\0';
                     new_password[strcspn(new_password, "\n")] = '\0'; 
                     new_password[sizeof(new_password) - 1] = '\0';
                     len = strlen(new_password);
-                    if (len > 0 && new_password[len - 1] == '\n') {
+                    if (len > 0 && new_password[len - 1] == '\n') 
+                    {
                         new_password[len - 1] = '\0';
                     }
 
-                    // Update the password in the customer struct
                     strncpy(c.password, new_password, sizeof(c.password) - 1);
 
-                    // Write the updated password to the file
                     lseek(fd, position, SEEK_SET);
-                    if (write(fd, &c, sizeof(struct employee)) != sizeof(struct employee)) {
+                    if (write(fd, &c, sizeof(struct employee)) != sizeof(struct employee)) 
+                    {
                         perror("Failed to reset password");
                         strcpy(buffer, "Error: Failed to reset password.\n");
                         write(sock, buffer, strlen(buffer));
-                    } else {
+                    } 
+                    else 
+                    {
                         strcpy(buffer, "Password reset successfully.\n");
                         write(sock, buffer, strlen(buffer));
                     }
                     break;
 
-                case 4: // Exit
+                case 4:
                     strcpy(buffer, "Exiting employee management.\n");
                     write(sock, buffer, strlen(buffer));
                     break;
@@ -2223,20 +2259,21 @@ void handle_admin_requests(int sock, const char *user_id)
                     write(sock, buffer, strlen(buffer));
                     break;
             }
-
-            // Unlock and close the file
             flock(fd, F_UNLCK);
             close(fd);
         }
-        else if (strcmp(buffer, "MANAGE_USER_ROLES") == 0) {
+        else if (strcmp(buffer, "MANAGE_USER_ROLES") == 0) 
+        {
             manage_user_roles(sock);
         }
-        else if (strcmp(buffer, "CHANGE_PWD") == 0) {
+        else if (strcmp(buffer, "CHANGE_PWD") == 0) 
+        {
             char new_pwd[50];
             read(sock, new_pwd, sizeof(new_pwd));
             new_pwd[sizeof(new_pwd) - 1] = '\0';
             size_t len = strlen(new_pwd);
-            if (len > 0 && new_pwd[len - 1] == '\n') {
+            if (len > 0 && new_pwd[len - 1] == '\n') 
+            {
                 new_pwd[len - 1] = '\0';
             }
             int status = change_admin_password(id, new_pwd);
@@ -2263,7 +2300,6 @@ int validate_login(const char *role, const char *uid, const char *password) {
     FILE *file;
     char filename[50];
     
-    // Determine file based on role
     if (strcmp(role, "customer") == 0) {
         strcpy(filename, "./data/customer.data");
     } else if (strcmp(role, "employee") == 0) {
@@ -2273,54 +2309,67 @@ int validate_login(const char *role, const char *uid, const char *password) {
     } else if (strcmp(role, "admin") == 0) {
         strcpy(filename, "./data/admin.data");
     } else {
-        return 0;  // Invalid role
+        return 0; 
     }
 
-    // Open the appropriate file
     file = fopen(filename, "rb");
-    if (file == NULL) {
+    if (file == NULL) 
+    {
         perror("File open error");
         return 0;
     }
 
-    // Check for matching ID and password in the file
-    if (strcmp(role, "customer") == 0) {
+    if (strcmp(role, "customer") == 0) 
+    {
         struct customer c;
-        while (fread(&c, sizeof(struct customer), 1, file) == 1) {
-            if ((c.userID == id) && strcmp(c.password, password) == 0) {
+        while (fread(&c, sizeof(struct customer), 1, file) == 1) 
+        {
+            if ((c.userID == id) && strcmp(c.password, password) == 0) 
+            {
                 fclose(file);
-                return 1;  // Login success
+                return 1;
             }
         }
     }
-    else if (strcmp(role, "employee") == 0) {
+    else if (strcmp(role, "employee") == 0) 
+    {
         struct employee emp;
-        while (fread(&emp, sizeof(struct employee), 1, file) == 1) {
-            if ((emp.employeeID == id) && strcmp(emp.password, password) == 0) {
+        while (fread(&emp, sizeof(struct employee), 1, file) == 1) 
+        {
+            if ((emp.employeeID == id) && strcmp(emp.password, password) == 0) 
+            {
                 fclose(file);
-                return 1;  // Login success
+                return 1;
             }
         }
-    } else if (strcmp(role, "manager") == 0) {
+    } 
+    else if (strcmp(role, "manager") == 0) 
+    {
         struct manager mgr;
-        while (fread(&mgr, sizeof(struct manager), 1, file) == 1) {
-            if ((mgr.managerID == id) && strcmp(mgr.password, password) == 0) {
+        while (fread(&mgr, sizeof(struct manager), 1, file) == 1) 
+        {
+            if ((mgr.managerID == id) && strcmp(mgr.password, password) == 0) 
+            {
                 fclose(file);
-                return 1;  // Login success
+                return 1; 
             }
         }
-    } else if (strcmp(role, "admin") == 0) {
+    } 
+    else if (strcmp(role, "admin") == 0) 
+    {
         struct admin admin;
-        while (fread(&admin, sizeof(struct admin), 1, file) == 1) {
-            if ((admin.adminID == id) && strcmp(admin.password, password) == 0) {
+        while (fread(&admin, sizeof(struct admin), 1, file) == 1) 
+        {
+            if ((admin.adminID == id) && strcmp(admin.password, password) == 0) 
+            {
                 fclose(file);
-                return 1;  // Login success
+                return 1; 
             }
         }
     }
 
     fclose(file);
-    return 0;  // Login failed
+    return 0;
 }
 
 
@@ -2330,43 +2379,38 @@ void *handle_client(void *client_socket)
     char buffer[BUFFER_SIZE], role[20], id[10], password[50];
     int bytes_read;
 
-    // Receive role from client
     bytes_read = read(sock, role, sizeof(role) - 1);
     role[bytes_read] = '\0';
 
-    // Receive login credentials (ID and password)
     bytes_read = read(sock, buffer, sizeof(buffer) - 1);
     buffer[bytes_read] = '\0';
 
-    // Parse credentials
     sscanf(buffer, "%s %s", id, password);
 
-    // Validate login
     if (validate_login(role, id, password))
     {
         write(sock, "SUCCESS", strlen("SUCCESS"));
 
-        // Handle specific role requests
         if (strcmp(role, "customer") == 0)
         {
-            handle_customer_requests(sock, id); // Handle customer requests
+            handle_customer_requests(sock, id); 
         }
         else if (strcmp(role, "employee") == 0)
         {
-            handle_employee_requests(sock, id); // Handle customer requests
+            handle_employee_requests(sock, id);
         }
         else if (strcmp(role, "manager") == 0)
         {
-            handle_manager_requests(sock, id); // Handle customer requests
+            handle_manager_requests(sock, id); 
         }
         else if (strcmp(role, "admin") == 0)
         {
-            handle_admin_requests(sock, id); // Handle customer requests
+            handle_admin_requests(sock, id);
         }
     }
     else
     {
-        write(sock, "Invalid ID or Password", strlen("Invalid ID or Password"));
+        write(sock, "Invalid ID or Password or Role", strlen("Invalid ID or Password or Role"));
     }
 
     close(sock);
@@ -2382,26 +2426,16 @@ int main()
     int addrlen = sizeof(address);
     pthread_t thread_id;
 
-    // Create socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
     {
         perror("Socket failed");
         exit(EXIT_FAILURE);
     }
 
-    // Configure server address
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
 
-    int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) < 0)
-    {
-        perror("setsockopt failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // Bind socket to port
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
     {
         perror("Bind failed");
@@ -2409,7 +2443,6 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    // Listen for clients
     if (listen(server_fd, 10) < 0)
     {
         perror("Listen failed");
